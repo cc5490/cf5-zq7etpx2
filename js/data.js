@@ -53,9 +53,12 @@
     { id: "f10_perm", name: "Linux 权限与日志狩猎", domain: "foundation", level: 3,
       desc: "SUID/SGID/sticky/数字权限 + 从访问日志中识别真实攻击痕迹。",
       reqs: ["f2_linux"], time: 30, tags: ["F10"], },
+    { id: "f11_cve", name: "CVE 案例博物馆", domain: "foundation", level: 2,
+      desc: "心脏滴血/破壳/永恒之蓝/Log4Shell/Spring4Shell/XZ后门: 根因、影响、教训。",
+      reqs: ["f6_eng"], time: 25, tags: ["F11"], },
     { id: "f_boss", name: "FOUNDATION BOSS", domain: "foundation", level: 4,
       desc: "综合 Linux Server + Web Service + Network + Logs + Permissions + Python。不提供课程标签。",
-      reqs: ["f3_win", "f3b_ps", "f5_git", "f6_eng", "f7_nmap", "f9_capture", "f10_perm"], time: 60, tags: ["BOSS"], boss: true },
+      reqs: ["f3_win", "f3b_ps", "f5_git", "f6_eng", "f7_nmap", "f9_capture", "f10_perm", "f11_cve"], time: 60, tags: ["BOSS"], boss: true },
 
     /* --- WEB SECURITY --- */
     { id: "w0_http", name: "HTTP Request Lab", domain: "web", level: 1,
@@ -117,9 +120,11 @@
       desc: "会话可预测、未绑定、无过期、无 HttpOnly/Secure。", reqs: ["w2_auth"], time: 15, tags: ["W23"], },
     { id: "w24_llm", name: "Web LLM Security", domain: "web", level: 3,
       desc: "提示词注入让 LLM 泄露系统提示词或执行非预期操作。", reqs: ["w5_xss"], time: 20, tags: ["W24"], },
+    { id: "w25_sms", name: "短信轰炸与验证码绕过", domain: "web", level: 3,
+      desc: "无频率限制的短信接口 + 可复用验证码: 资损与账号安全的经典组合。", reqs: ["w11_logic"], time: 25, tags: ["W25"], },
     { id: "w_boss", name: "WEB BOSS", domain: "web", level: 4,
       desc: "在陌生靶场中 3 小时内完成侦察→建模→漏洞定位→验证→影响说明→报告。",
-      reqs: ["w9_cmdi", "w11_logic", "w12_traversal", "w13_xxe", "w14_ssti", "w15_nosqli",
+      reqs: ["w9_cmdi", "w11_logic", "w25_sms", "w12_traversal", "w13_xxe", "w14_ssti", "w15_nosqli",
              "w16_deser", "w17_oauth", "w18_race", "w19_proto", "w20_graphql",
              "w21_misconfig", "w22_sensitive", "w23_session", "w24_llm"],
       time: 180, tags: ["BOSS"], boss: true },
@@ -143,9 +148,11 @@
       desc: "模拟审核员反馈(信息不足/证据不足/影响不足/重复/分类错误),返修报告。", reqs: ["s1_report"], time: 30, tags: ["S2"], },
     { id: "s3_board", name: "SRC 项目大厅", domain: "src", level: 4,
       desc: "读 Scope、查历史漏洞去重、选择目标、提交并接受真实评级(有效/重复/忽略)与赏金。", reqs: ["s2_review"], time: 40, tags: ["S3"], },
+    { id: "s4_cvss", name: "CVSS 3.1 评分训练", domain: "src", level: 3,
+      desc: "用标准向量给漏洞定级: 你的报告评级是否经得起审核员推敲。", reqs: ["s1_report"], time: 30, tags: ["S4"], },
     { id: "s_boss", name: "UNKNOWN TARGET", domain: "src", level: 4,
       desc: "完全不告诉漏洞类型、位置、参数。自行完成完整研究闭环并提交报告。",
-      reqs: ["s3_board"], time: 240, tags: ["BOSS"], boss: true },
+      reqs: ["s3_board", "s4_cvss"], time: 240, tags: ["BOSS"], boss: true },
   ];
 
   /* ---------- 解锁检查 ---------- */
@@ -741,6 +748,7 @@
       w22_sensitive: ["敏感数据泄露", "密钥文件可公开访问,凭据写进前端或备份", "禁访敏感文件,密钥进 KMS,定期轮换"],
       w23_session: ["会话安全", "会话 ID 可预测/不绑定/不失效", "高熵随机 ID + HttpOnly/Secure/SameSite + 过期 + 绑定"],
       w24_llm: ["LLM 提示词注入", "用户输入与系统指令无隔离,可覆盖系统指令", "输入输出审查,敏感信息不放提示词,工具调用白名单"],
+      w25_sms: ["短信轰炸与验证码绕过", "敏感操作接口无频率限制且验证码可复用", "手机号+IP 双维度限流、图形验证前置、验证码一次一用并绑定具体操作"],
     };
     const auto = (id) => {
       if (vulnTheory[id]) {
@@ -883,6 +891,38 @@
         ],
         verify: [{ q: "提交前必须独立完成的一步?", a: 0, opts: ["查历史已报漏洞,确认不重复", "先写奖金期望", "截图首页", "测试 DDoS"] }],
       };
+      if (id === "s4_cvss") return {
+        title: "CVSS 3.1 评分训练", theory: "评级不是拍脑袋: 攻击途径/复杂度/权限/交互/范围/影响(C-I-A) 八个维度决定分值。",
+        steps: [
+          { key: "s1", name: "极短理论", body: "CVSS 3.1 八指标: AV 攻击途径(N 网络/A 相邻/L 本地/P 物理)、AC 复杂度、PR 权限、UI 交互、S 范围(U/C)、C/I/A 机密性-完整性-可用性(各 H/L/N)。" },
+          { key: "s2", name: "可视化", body: "打开评分器,观察每个指标选择如何实时改变分数与等级。" },
+          { key: "s3", name: "跟做", body: "给场景 1(SQL 注入脱库)选向量并提交,对照参考解析。" },
+          { key: "s4", name: "半独立", body: "独立完成场景 2(XSS)和场景 3(越权),误差 ≤0.5 才算通过。" },
+          { key: "s5", name: "解释", body: "解释: 为什么反射型 XSS 通常只有中危(UI:R + C:L)? 哪些情况能到高危?" },
+          { key: "s6", name: "变体", body: "存储型 XSS(无需点击,S:U,C:H) 该评多少? 和反射型差在哪两项?" },
+          { key: "s7", name: "迁移", body: "以后每份报告都附 CVSS 向量串(AV:N/AC:L/...) — 审核员最先看的就是它。" },
+        ],
+        verify: [
+          { q: "CVSS 中 PR:L 表示?", a: 0, opts: ["攻击者需要普通用户权限", "攻击者无需任何权限", "攻击者需要管理员权限", "目标系统打了补丁"] },
+          { q: "反射型 XSS 相比 SQL 注入脱库,通常少了哪两项的权重?", a: 0, opts: ["UI(需诱导点击)和 C(只泄露部分信息)", "AV 和 AC", "PR 和 S", "I 和 A"] },
+        ],
+      };
+      if (id === "f11_cve") return {
+        title: "CVE 案例博物馆", theory: "历史重大漏洞是最好的教材: 每个都对应一类至今仍在复发的根因。",
+        steps: [
+          { key: "s1", name: "极短理论", body: "看 CVE 三要素: 根因(哪类信任假设被打破)、影响(危害有多大)、教训(防御该建在哪一层)。" },
+          { key: "s2", name: "可视化", body: "点开右侧 6 个案例卡,逐个阅读根因/影响/教训。" },
+          { key: "s3", name: "跟做", body: "完成 5 道根因归纳题(至少对 4 题)。" },
+          { key: "s4", name: "半独立", body: "不看卡片,独立说出 Heartbleed 和 EternalBlue 的共同根因类别。" },
+          { key: "s5", name: "解释", body: "解释: 为什么说『6 个案例里 5 个归根于对输入的信任假设出错』?" },
+          { key: "s6", name: "变体", body: "Log4Shell 的 JNDI 外连,和你练过的 SSRF 有什么家族相似性?" },
+          { key: "s7", name: "迁移", body: "以后每看到新 CVE,先自己归因(内存/注入/信任边界),再看官方分析对照。" },
+        ],
+        verify: [
+          { q: "Log4Shell 属于哪类根因?", a: 0, opts: ["把输入当表达式解析(JNDI 注入)", "弱密码", "缓冲区溢出", "权限校验缺失"] },
+          { q: "XZ Utils 后门给防御者的最大启示?", a: 0, opts: ["开源供应链的信任链本身可能被攻击", "SSH 该淘汰", "压缩算法不安全", "个人电脑不会被后门"] },
+        ],
+      };
       return null;
     };
     return C[id] || auto(id);
@@ -903,6 +943,8 @@
     "w5_xss": [
       { title: "XSS 变体 · 反射型", setup: "搜索框输入内容会原样显示在结果页。", task: "让页面执行 alert(1)。", param: "q", flag: "<script>alert(1)</script>", hint: "输入的内容被直接输出到 HTML。" },
       { title: "XSS 变体 · DOM 型", setup: "URL hash 中的内容被 JavaScript 直接写入页面,不经过服务器。", task: "通过 URL hash 触发 XSS。", param: "hash", flag: "#<img src=x onerror=alert(1)>", hint: "关注前端 JavaScript 如何处理 URL 参数。" },
+      { title: "XSS 变体 · WAF 拦截 script 标签", setup: "WAF 拦截所有包含 <script 的请求。页面仍原样输出其他内容。", task: "不使用 <script> 标签,仍然注入可执行脚本。", param: "q", flag: "<img src=x onerror=alert(1)>", hint: "HTML 事件属性(onerror/onload)不依赖 script 标签。" },
+      { title: "XSS 变体 · 大小写绕过精确匹配", setup: "WAF 精确匹配小写 <img src=x onerror=alert(1)>,大小写敏感。", task: "改变大小写绕过精确匹配。", param: "q", flag: "<ImG SrC=x OnErRoR=alert(1)>", hint: "HTML 标签和属性名不区分大小写,WAF 的精确匹配区分。" },
     ],
   };
 

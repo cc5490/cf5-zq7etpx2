@@ -188,9 +188,9 @@
       S.diagDone = true;
 
       // 生成学习路线
-      const order = ["f0_cpu","f0b_vm","f1_net","f1b_protocols","f2_linux","f3_win","f3b_ps","f4_py","f5_git","f_boss",
-        "w0_http","w1_burp","w2_auth","w3_ac","w4_sqli","w5_xss","w6_csrf","w7_upload","w8_ssrf","w9_cmdi","w10_api","w11_logic","w_boss",
-        "r0_recon","r1_model","r2_verify","r3_fp","s0_scope","s1_report","s2_review","s_boss"];
+      const order = ["f0_cpu","f0b_vm","f1_net","f1b_protocols","f2_linux","f3_win","f3b_ps","f4_py","f5_git","f11_cve","f_boss",
+        "w0_http","w1_burp","w2_auth","w3_ac","w4_sqli","w5_xss","w6_csrf","w7_upload","w8_ssrf","w9_cmdi","w10_api","w11_logic","w25_sms","w_boss",
+        "r0_recon","r1_model","r2_verify","r3_fp","s0_scope","s1_report","s2_review","s4_cvss","s3_board","s_boss"];
       const skip = [];
       if (pcts.Computer >= 75) skip.push("f0_cpu");
       if (pcts.Network >= 75) skip.push("f1_net");
@@ -334,11 +334,11 @@
         "w15_nosqli": [1,2,3], "w16_deser": [1,2,3], "w17_oauth": [1,2,3],
         "w18_race": [1,2,3], "w19_proto": [1,2,3], "w20_graphql": [1,2,3],
         "w21_misconfig": [1,2,3], "w22_sensitive": [1,2,3], "w23_session": [1,2,3],
-        "w24_llm": [1,2,3],
+        "w24_llm": [1,2,3], "w25_sms": [1,2,3],
         "f6_eng": [1,2,3], "f7_nmap": [1,2,3],
         "f8_subnet": [1,2,3], "f9_capture": [1,2,3], "f10_perm": [1,2,3],
-        "f0b_vm": [1,2,3], "f1b_protocols": [1,2,3], "f3b_ps": [1,2,3],
-        "s3_board": [1,2,3],
+        "f0b_vm": [1,2,3], "f1b_protocols": [1,2,3], "f3b_ps": [1,2,3], "f11_cve": [1,2,3],
+        "s3_board": [1,2,3], "s4_cvss": [1,2,3],
         "w_boss": [1,2,3,4,5,6], "r0_recon": [1,2,3], "r3_fp": [1,2,3],
         "s0_scope": [1,2,3], "s1_report": [1,2,3], "s2_review": [1,2,3],
         "s_boss": [1,2,3,4,5,6],
@@ -351,6 +351,8 @@
         else if (id.startsWith("f2")) CF.createTerminal(zone, null, id);
         else if (id === "f3_win") CF.renderWindowsDiag(zone);
         else if (id === "f3b_ps") CF.renderPowerShell(zone);
+        else if (id === "f11_cve") CF.renderCVEMuseum(zone);
+        else if (id === "s4_cvss") CF.renderCVSS(zone);
         else if (id === "f4_py") CF.renderPythonLab(zone);
         else if (id === "f5_git") CF.renderGitLab(zone);
         else if (id === "f6_eng") CF.renderEnglish(zone);
@@ -369,7 +371,7 @@
         else if (id === "w2_auth") CF.renderAuthLab(zone);
         else if (CF.vulnLabs && CF.vulnLabs[id]) CF.renderVulnLab(zone, CF.vulnLabs[id]);
         else if (id === "w_boss") { CF.renderWebBoss(zone); CF.attachBossTimer(zone); }
-        else if (id === "r0_recon") CF.renderReconLab(zone);
+        else if (id === "r0_recon") CF.renderTabs(zone, [["攻击面建模", CF.renderReconLab], ["侦察工具", CF.renderReconTools]]);
         else if (id === "r3_fp") CF.renderFpTrainer(zone);
         else if (id === "s1_report" || id === "s2_review") CF.renderReportWriter(zone);
         else if (id === "s_boss") CF.renderFinalBoss(zone);
@@ -390,8 +392,8 @@
       "f8_subnet","f9_capture","f10_perm","w0_http","w1_burp","w2_auth",
       "w3_ac","w4_sqli","w5_xss","w6_csrf","w7_upload","w8_ssrf","w9_cmdi","w10_api","w11_logic",
       "w12_traversal","w13_xxe","w14_ssti","w15_nosqli","w16_deser","w17_oauth","w18_race",
-      "w19_proto","w20_graphql","w21_misconfig","w22_sensitive","w23_session","w24_llm",
-      "r0_recon","r3_fp","s3_board",
+      "w19_proto","w20_graphql","w21_misconfig","w22_sensitive","w23_session","w24_llm","w25_sms",
+      "r0_recon","r3_fp","s3_board","f11_cve","s4_cvss",
     ]);
     if (key === "s3" && needLabBeforeS3.has(id) && !BOSS[id]) {
       const p = CF.prog.node(id);

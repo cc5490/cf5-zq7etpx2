@@ -190,7 +190,7 @@ check("E2 SQLi 实验成功授予 e2", sqli_e2 is True, str(resp_txt)[:80])
 radar = c.eval("JSON.stringify(CF.computeRadar().vals)")
 check("G1 雷达数据可计算", radar is not None and len(json.loads(radar)) == 5, radar)
 vp = c.eval("JSON.stringify({have:CF.renderVulnProgress().have,total:CF.renderVulnProgress().total})")
-check("G2 硬指标计数器可用", json.loads(vp)["total"] == 50, vp)
+check("G2 硬指标计数器可用", json.loads(vp)["total"] == 50, vp)  # 漏洞练习硬指标: SQLi10+XSS10+越权10+SSRF5+认证5+上传5+逻辑5
 
 # ---------- 测试 H: BOSS 不能只靠点步骤通关 ----------
 c.eval("""['s1','s2','s3','s4','s5','s6','s7'].forEach(k=>CF.prog.markStep('w_boss',k));
@@ -278,6 +278,79 @@ for gcmd in ["git init", "git add .", "git commit -m note", "git branch research
     time.sleep(0.1)
 git_e2 = c.eval("CF.prog.node('f5_git').evidence.e2 === true && CF.prog.node('f5_git').evidence.e3 === true")
 check("K2 Git 分支全流程通过", git_e2 is True)
+
+# ---------- 测试 L: 全面升级新内容(评估框架补缺) ----------
+l1 = c.eval("JSON.stringify(['f0b_vm','f1b_protocols','f3b_ps','f11_cve','w25_sms','s4_cvss'].map(id=>!!CF.nodeContent(id)))")
+check("L1 六个扩展节点课程就绪", l1.count("true") == 6, l1)
+l2 = c.eval("CF.variants['w5_xss'].length")
+check("L2 XSS 变体含 WAF 绕过(4个)", l2 == 4, f"variants={l2}")
+
+# f11_cve: CVE 博物馆 — 全部节点已在前置标记 done(避免解锁问题),进入答题
+c.eval("CF.go('node?f11_cve'); CF.viewStep('f11_cve',2); 'ok'")
+time.sleep(0.8)
+cve_opts = c.eval("document.querySelectorAll('.task-item[data-case]').length")
+check("L3 CVE 博物馆 6 案例渲染", cve_opts == 6, f"cases={cve_opts}")
+c.eval("document.querySelectorAll('.task-item[data-case]')[0].click(); 'ok'")
+c.eval("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('归纳答题')).click(); 'ok'")
+time.sleep(0.3)
+# 通用答题: 正确答案都在第 1 个选项
+def run_cve_quiz():
+    for _ in range(10):
+        opt = c.eval("document.querySelector('#cve-q .diag-opt') ? 1 : 0")
+        if not opt:
+            break
+        c.eval("document.querySelector('#cve-q .diag-opt').click(); 'ok'")
+        time.sleep(0.05)
+        c.eval("document.querySelector('#cve-next') ? document.querySelector('#cve-next').click() : 0; 'ok'")
+        time.sleep(0.05)
+run_cve_quiz()
+time.sleep(0.3)
+cve_ev = c.eval("CF.prog.node('f11_cve').evidence.e2 === true && CF.prog.node('f11_cve').evidence.e4 === true")
+check("L4 CVE 归纳答题授予 e2+e4", cve_ev is True)
+
+# s4_cvss: CVSS 三场景 — 点选参考向量后提交
+c.eval("CF.go('node?s4_cvss'); CF.viewStep('s4_cvss',2); 'ok'")
+time.sleep(0.8)
+# 场景1: 点 C:H I:H A:H; 场景2: UI:R S:C C:L I:L; 场景3: PR:L C:H
+for clicks in [["C|H","I|H","A|H"], ["UI|R","S|C","C|L","I|L"], ["PR|L","C|H"]]:
+    for kv in clicks:
+        k, v = kv.split("|")
+        c.eval(f"document.querySelector('[data-k=\"{k}\"][data-v=\"{v}\"]').click(); 'ok'")
+        time.sleep(0.03)
+    c.eval("document.querySelector('#cv-submit').click(); 'ok'")
+    time.sleep(0.2)
+    c.eval("document.querySelector('#cv-next') ? document.querySelector('#cv-next').click() : 0; 'ok'")
+    time.sleep(0.2)
+cvss_ev = c.eval("CF.prog.node('s4_cvss').evidence.e2 === true && CF.prog.node('s4_cvss').evidence.e4 === true")
+check("L5 CVSS 三场景通过授予 e2+e4", cvss_ev is True)
+
+# w25_sms: 短信轰炸 — 预置请求连发 8 次
+c.eval("CF.go('node?w25_sms'); CF.viewStep('w25_sms',2); 'ok'")
+time.sleep(0.8)
+for _ in range(8):
+    c.eval("document.querySelector('#vb-send').click(); 'ok'")
+    time.sleep(0.12)
+sms_e2 = c.eval("CF.prog.node('w25_sms').evidence.e2 === true")
+check("L6 短信轰炸连发 8 次出 FLAG 授予 e2", sms_e2 is True)
+# 验证码复用: 先确认已有 code_hint,再连发 3 次校验
+c.eval("""(()=>{ document.querySelector('#vb-path').value='/api/sms/verify';
+  document.querySelector('#vb-body').value='{"phone":"13800138000","code":"886722"}';
+  document.querySelector('#vb-method') ? document.querySelector('#vb-method').value='POST' : 0; return 'ok';})()""")
+time.sleep(0.2)
+for _ in range(3):
+    c.eval("document.querySelector('#vb-send').click(); 'ok'")
+    time.sleep(0.12)
+sms_replay = c.eval("document.querySelector('#vb-resp').textContent.includes('c4ptch4_r3us3')")
+check("L7 验证码重放 3 次出 FLAG", sms_replay is True)
+
+# r0_recon: 侦察工具 tab(懒加载,需先点第二个 tab; 前置 w_boss 需临时解锁)
+c.eval("CF.prog.node('w_boss').done = true; CF.go('node?r0_recon'); CF.viewStep('r0_recon',2); 'ok'")
+time.sleep(0.8)
+recon_tab_btn = c.eval("[...document.querySelectorAll('button')].some(b=>b.textContent.includes('侦察工具'))")
+c.eval("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('侦察工具')).click(); 'ok'")
+time.sleep(0.3)
+recon_tools = c.eval("document.body.textContent.includes('目录爆破') && document.body.textContent.includes('子域名枚举')")
+check("L8 侦察工具(子域名+目录爆破)渲染", recon_tab_btn is True and recon_tools is True)
 
 c.close()
 proc.terminate()

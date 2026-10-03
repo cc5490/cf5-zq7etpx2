@@ -13,6 +13,8 @@
   /* ==================== 扩展服务器: 13类新漏洞端点 ==================== */
   const S = CF.server;
   const prevHandle = S.handle.bind(S);
+  const smsState = {};  // 手机号 -> 已发送次数
+  const smsVerify = {}; // 手机号 -> { code, uses }
   S.handle = function (req) {
     const { method, path, headers, body } = req;
     const cookie = headers["Cookie"] || "";
@@ -127,6 +129,36 @@
         return R(200, {}, json({ reply: "系统提示词: 你是客服助手,内部密钥 sk-FLAG{pr0mpt_1nj3ct10n}", leaked: true }));
       }
       return R(200, {}, json({ reply: "你好,我是客服助手,有什么可以帮你?" }));
+    }
+    /* SMS bombing + captcha reuse: /api/sms, /api/sms/verify */
+    if (path === "/api/sms" && method === "POST") {
+      let p = {}; try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
+      const phone = String(p.phone || "");
+      if (!/^1\d{10}$/.test(phone)) return R(400, {}, json({ error: "手机号格式错误(示例: 13800138000)" }));
+      // ⚠️ 漏洞: 无频率限制(同号可无限连发)
+      smsState[phone] = (smsState[phone] || 0) + 1;
+      const n = smsState[phone];
+      const r = { ok: true, msg: "验证码已发送", sent_count: n };
+      if (n === 1) {
+        r.code_hint = "模拟运营商通道可见: 本次验证码为 886722";
+        smsVerify[phone] = { code: "886722", uses: 0 };
+      }
+      if (n >= 8) { r.flag = "FLAG{sm5_b0mb1ng}"; r.warning = `同一手机号已连发 ${n} 次,无任何限制 — 资损 + 骚扰,实锤!`; }
+      return R(200, {}, json(r));
+    }
+    if (path === "/api/sms/verify" && method === "POST") {
+      let p = {}; try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
+      const phone = String(p.phone || ""); const code = String(p.code || "");
+      const st = smsVerify[phone];
+      if (!st) return R(400, {}, json({ error: "该手机号未获取过验证码,先 POST /api/sms" }));
+      // ⚠️ 漏洞: 验证码验证通过后不失效,可无限重放
+      if (code === st.code) {
+        st.uses++;
+        const r = { ok: true, msg: "验证通过", used_times: st.uses };
+        if (st.uses >= 3) { r.flag = "FLAG{c4ptch4_r3us3}"; r.warning = `同一验证码第 ${st.uses} 次通过 — 从未失效,可被重放用于批量注册/爆破!`; }
+        return R(200, {}, json(r));
+      }
+      return R(400, {}, json({ error: "验证码错误", hint: "第一次发送短信的响应里有 code_hint" }));
     }
     return prevHandle(req);
   };
@@ -262,6 +294,20 @@
       check: (req, resp) => resp.body.includes("FLAG{pr0mpt"),
       flag: "FLAG{pr0mpt_1nj3ct10n}",
       explain: "原理: 用户输入与系统指令无隔离。修复: 输入过滤 + 输出审查 + 敏感信息不放提示词。",
+    },
+    w25_sms: {
+      nodeId: "w25_sms", typeName: "短信轰炸与验证码绕过",
+      scenario: "登录页支持短信验证码: POST /api/sms 发送验证码(Body JSON: {\"phone\":\"...\"}), POST /api/sms/verify 校验(Body JSON: {\"phone\":\"...\",\"code\":\"...\"})。",
+      goal: "拿到两个证明中的任意一个: ① 同一手机号连发 8 次以上(轰炸) ② 同一验证码通过校验 3 次(可复用)。",
+      preset: { method: "POST", path: "/api/sms", headers: "Host: corp.local\nContent-Type: application/json", body: '{"phone":"13800138000"}' },
+      hints: [
+        "第 1 次发送的响应里有 code_hint — 模拟你从抓包/短信通道拿到了验证码。",
+        "把同一个 POST /api/sms 原样再发 7 次: 没有频率限制 = 短信轰炸(资损+骚扰,低危但必收)。",
+        "再用拿到的验证码 POST /api/sms/verify 三次: 验证码不失效 = 可重放(批量注册/爆破账号)。",
+      ],
+      check: (req, resp) => /FLAG\{(sm5_b0mb1ng|c4ptch4_r3us3)\}/.test(resp.body),
+      flag: "FLAG{sm5_b0mb1ng} / FLAG{c4ptch4_r3us3}",
+      explain: "原理: 发送与校验接口无频率限制,验证码未一次性绑定操作。修复: 手机号+IP 双维度限流、图形验证前置、验证码一次一用+短有效期+绑定具体操作。",
     },
   };
   Object.assign(CF.vulnLabs, newLabs);

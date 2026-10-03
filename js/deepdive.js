@@ -433,4 +433,289 @@ SvcUpdHelper    REG_SZ    <span style="color:var(--red)">C:\\Users\\Public\\svch
       if (ok) { CF.prog.markEvidence("f10_perm", "e4"); CF.prog.addXP(60); }
     };
   };
+
+  /* ==================== CVE 案例博物馆 ==================== */
+  CF.renderCVEMuseum = (container) => {
+    const cases = [
+      { id: "CVE-2014-0160", name: "Heartbleed 心脏滴血", year: 2014, target: "OpenSSL",
+        type: "内存越界读取", cause: "心跳机制没有检查请求长度,攻击者请求 64KB 数据但只发 1 字节,服务器把相邻内存(私钥/密码/会话)原样吐回。",
+        impact: "全球约 17% 的 HTTPS 网站受影响,可读取服务器内存中的私钥与会话令牌。",
+        lesson: "解析外部输入前先校验长度声明; 加密库代码必须经过审计。" },
+      { id: "CVE-2014-6271", name: "Shellshock 破壳", year: 2014, target: "GNU Bash",
+        type: "命令注入", cause: "Bash 把环境变量中以 () { 开头的内容当函数定义解析,后面的命令也被执行。CGI 把 User-Agent 等头部放进环境变量。",
+        impact: "数百万台启用 CGI 的 Web 服务器可被远程执行任意命令。",
+        lesson: "环境变量也是输入; 解释器解析规则里的历史包袱是深水炸弹。" },
+      { id: "CVE-2017-0144", name: "EternalBlue 永恒之蓝", year: 2017, target: "Windows SMBv1",
+        type: "缓冲区溢出", cause: "SMBv1 协议处理恶意 crafted 数据包时发生内核级缓冲区溢出,无需认证即可远程执行代码。",
+        impact: "被 WannaCry 勒索病毒利用,一天内感染 150 个国家 20 万+ 台机器。",
+        lesson: "古老协议(SMBv1)该退役就退役; 内核代码的内存安全是底线。" },
+      { id: "CVE-2021-44228", name: "Log4Shell", year: 2021, target: "Apache Log4j2",
+        type: "JNDI 注入/反序列化", cause: "日志框架把记录内容中的 ${jndi:ldap://...} 当表达式解析,主动向攻击者服务器发起连接并加载远程类。",
+        impact: "全球数亿设备受影响,苹果 iCloud、Steam、特斯拉后台均中招。",
+        lesson: "日志内容也是危险输入; 依赖组件的供应链风险必须持续跟踪。" },
+      { id: "CVE-2022-22965", name: "Spring4Shell", year: 2022, target: "Spring Framework",
+        type: "类绑定/属性注入", cause: "通过参数名 class.module.classLoader 链式绑定,攻击者能改写 Tomcat 的 AccessLogValve 属性,把 Webshell 写进日志路径。",
+        impact: "JDK9+ + WAR 部署的 Spring 应用可被 RCE。",
+        lesson: "自动数据绑定必须白名单; 深层属性链就是攻击面。" },
+      { id: "CVE-2024-3094", name: "XZ Utils 后门", year: 2024, target: "xz/liblzma",
+        type: "供应链投毒", cause: "维护者被长期社会工程后,在压缩库构建阶段植入混淆后门,专门劫持 sshd 的认证流程。",
+        impact: "差几周就进入各大发行版稳定源; 由微软工程师偶然排查性能问题才暴露。",
+        lesson: "开源依赖的信任链是真实攻击面; 关键库的异常行为值得持续监控。" },
+    ];
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `
+      <div class="dim small mb">点开每个案例,按『根因 → 影响 → 教训』阅读。全部读完后答题(至少 4/5)。</div>
+      ${cases.map((c, i) => `
+        <div class="task-item" style="flex-wrap:wrap;cursor:pointer" data-case="${i}">
+          <div class="t-name" style="flex-basis:100%">[${c.year}] ${c.name} <span class="faint small mono">${c.id}</span></div>
+          <span class="tag red">${c.type}</span><span class="tag purple">${c.target}</span>
+        </div>`).join("")}
+      <div id="cve-detail" class="mt"></div>
+      <div id="cve-q" class="mt"></div>`;
+    container.appendChild(wrap);
+    const det = wrap.querySelector("#cve-detail");
+    wrap.querySelectorAll("[data-case]").forEach((el) => {
+      el.onclick = () => {
+        const c = cases[parseInt(el.dataset.case)];
+        det.innerHTML = `
+          <div class="term" style="font-size:.78rem;line-height:1.9;padding:14px">
+            <div style="color:var(--red)">根因: ${c.cause}</div>
+            <div style="color:var(--amber)">影响: ${c.impact}</div>
+            <div style="color:var(--green)">教训: ${c.lesson}</div>
+          </div>`;
+        el.style.borderColor = "var(--green-dim)";
+      };
+    });
+    // 常见根因归纳题
+    const qs = [
+      { q: "Heartbleed 与 EternalBlue 的共同根因类别?", opts: ["内存安全(越界/溢出)", "弱密码", "SQL 拼接", "权限校验缺失"], a: 0, why: "都是 C/C++ 内存安全问题: 前者越界读,后者缓冲区溢出。内存安全类漏洞几乎年年占高危榜前列。" },
+      { q: "Log4Shell 的第一攻击动作是什么?", opts: ["服务器主动向攻击者地址发起连接(JNDI)", "攻击者暴力破解", "上传 Webshell", "伪造 Cookie"], a: 0, why: "${jndi:ldap://} 让受害者服务器『主动外连』加载远程恶意类 — 这也是出网管控能缓解它的原因。" },
+      { q: "Shellshock 给我们的输入边界启示?", opts: ["环境变量/HTTP 头也是输入,同样危险", "只有 POST body 算输入", "GET 参数无需校验", "Cookie 是安全的"], a: 0, why: "凡是能被攻击者控制、又会进入解释器/解析器的数据,都是输入。User-Agent 进了 Bash 的环境变量就被执行了。" },
+      { q: "XZ Utils 后门攻击的是哪一环?", opts: ["软件供应链(构建/分发环节)", "运行时内存", "传输加密", "前端渲染"], a: 0, why: "代码还没上线就被植入后门 — 再强的 WAF 也拦不住供应链投毒。依赖治理与制品溯源是防御关键。" },
+      { q: "这 6 个案例中,哪类问题你以后写代码最该先防?", opts: ["解析外部输入时的信任假设(长度/格式/属性链)", "换更新的 IDE", "加更大的服务器", "隐藏报错信息"], a: 0, why: "6 个案例 5 个归根于『对输入的信任假设出错』: 长度没校验、环境变量没当输入、表达式被解析、属性链没白名单。这就是输入验证为什么是安全第一原则。" },
+    ];
+    let cur = 0, score = 0;
+    const holder = wrap.querySelector("#cve-q");
+    const renderQ = () => {
+      if (cur >= qs.length) {
+        holder.innerHTML = `<div class="diag-explain" style="border-color:${score >= 4 ? "var(--green-dim)" : "var(--amber)"}">${score}/${qs.length}。${score >= 4 ? "你已能从历史重大漏洞中归纳根因 — 这就是『举一反三』的迁移能力。" : "重新点开每个案例读一遍根因,再来答题。"}</div>`;
+        if (score >= 4) { CF.prog.markEvidence("f11_cve", "e2"); CF.prog.markEvidence("f11_cve", "e4"); CF.prog.addXP(60); }
+        return;
+      }
+      const q = qs[cur];
+      holder.innerHTML = `
+        <div class="row mb" style="justify-content:space-between"><b style="color:var(--cyan)">归纳题 ${cur + 1}/${qs.length}</b></div>
+        <div class="diag-q" style="font-size:.9rem">${q.q}</div>
+        ${q.opts.map((o, i) => `<button class="diag-opt" data-qi="${i}">${o}</button>`).join("")}
+        <div id="cve-fb"></div>`;
+      holder.querySelectorAll("[data-qi]").forEach((b) => {
+        b.onclick = () => {
+          const i = parseInt(b.dataset.qi);
+          if (i === q.a) score++;
+          holder.querySelectorAll("[data-qi]").forEach((x) => { x.disabled = true; if (parseInt(x.dataset.qi) === q.a) x.classList.add("correct"); });
+          holder.querySelector("#cve-fb").innerHTML = `<div class="diag-explain mt">${q.why}</div><button class="btn btn-sm btn-primary mt" id="cve-next">下一题 →</button>`;
+          holder.querySelector("#cve-next").onclick = () => { cur++; renderQ(); };
+        };
+      });
+    };
+    const startBtn = document.createElement("button");
+    startBtn.className = "btn btn-sm btn-primary mt";
+    startBtn.textContent = "开始归纳答题 →";
+    startBtn.onclick = renderQ;
+    wrap.appendChild(startBtn);
+  };
+
+  /* ==================== CVSS 3.1 评分训练 ==================== */
+  CF.renderCVSS = (container) => {
+    const W = { AV: { N: 0.85, A: 0.62, L: 0.55, P: 0.2 }, AC: { L: 0.77, H: 0.44 },
+      PR: { N: 0.85, L: 0.62, H: 0.27 }, UI: { N: 0.85, R: 0.62 }, CIA: { H: 0.56, L: 0.22, N: 0 } };
+    const PRS = { N: 0.85, L: 0.68, H: 0.5 }; // Scope Changed 时的 PR 权重
+    const LBL = { AV: "攻击途径", AC: "攻击复杂度", PR: "所需权限", UI: "用户交互", S: "影响范围", C: "机密性", I: "完整性", A: "可用性" };
+    const OPTS = {
+      AV: [["N", "网络(隔着互联网)"], ["A", "相邻网络(同 Wi-Fi)"], ["L", "本地(要登机器)"], ["P", "物理接触"]],
+      AC: [["L", "低(直接打)"], ["H", "高(要苛刻条件)"]],
+      PR: [["N", "无(匿名)"], ["L", "低(普通用户)"], ["H", "高(管理员)"]],
+      UI: [["N", "不需要"], ["R", "需要受害者配合(点链接)"]],
+      S: [["U", "不变(只影响本组件)"], ["C", "改变(波及其他组件)"]],
+      C: [["H", "高(全部泄露)"], ["L", "低(部分泄露)"], ["N", "无"]],
+      I: [["H", "高(可任意篡改)"], ["L", "低(有限篡改)"], ["N", "无"]],
+      A: [["H", "高(完全瘫痪)"], ["L", "低(性能下降)"], ["N", "无"]],
+    };
+    const cvss = (v) => {
+      const pr = v.S === "C" ? PRS[v.PR] : W.PR[v.PR];
+      const iss = 1 - (1 - W.CIA[v.C]) * (1 - W.CIA[v.I]) * (1 - W.CIA[v.A]);
+      const impact = v.S === "C" ? 7.52 * (iss - 0.029) - 3.25 * Math.pow(iss - 0.02, 15) : 6.42 * iss;
+      const expl = 8.22 * W.AV[v.AV] * W.AC[v.AC] * pr * W.UI[v.UI];
+      if (impact <= 0) return 0;
+      return Math.ceil(Math.min(impact + expl, 10) * 10) / 10;
+    };
+    const sev = (s) => s === 0 ? "无" : s < 4 ? "低危" : s < 7 ? "中危" : s < 9 ? "高危" : "严重";
+    const sevColor = (s) => s === 0 ? "faint" : s < 4 ? "cyan" : s < 7 ? "amber" : s < 9 ? "red" : "red";
+    // 三个真实场景(参考向量按同一公式计算,已用 Heartbleed 7.5 / 永恒之蓝 8.1 / Log4Shell 10.0 校准)
+    const scen = [
+      { name: "场景 1 · 电商 SQL 注入",
+        desc: "匿名攻击者从公网访问商品搜索接口,注入 SQL 读取全库: 用户表(姓名/手机号/地址)、订单、支付流水,还能改管理员密码。",
+        ref: { AV: "N", AC: "L", PR: "N", UI: "N", S: "U", C: "H", I: "H", A: "H" },
+        why: "参考: AV:N(公网直达) AC:L PR:N(无需登录) UI:N S:U C:H I:H A:H(数据全遭殃)。典型的 9.8 严重级 — SRC 里这类评级争议最小。" },
+      { name: "场景 2 · 反射型 XSS(需诱导点击)",
+        desc: "搜索页把关键词原样输出。攻击者构造恶意链接发给受害者,受害者点击后,攻击者的脚本在受害者浏览器里执行,可窃取会话。需要诱导点击,不影响服务器组件本身。",
+        ref: { AV: "N", AC: "L", PR: "N", UI: "R", S: "C", C: "L", I: "L", A: "N" },
+        why: "参考: UI:R(要诱导点击) S:C(危害超出组件,波及用户浏览器) C:L I:L A:N。典型的中危反射型 XSS — 审核员最常砍的就是把 UI:R 写成 N、把 C:L 写成 H 的报告。" },
+      { name: "场景 3 · 越权查看他人订单",
+        desc: "普通登录用户修改 URL 里的 order_id,可以查看任意用户的订单(收货人姓名/电话/地址)。不影响服务器可用性,不能改数据。",
+        ref: { AV: "N", AC: "L", PR: "L", UI: "N", S: "U", C: "H", I: "N", A: "N" },
+        why: "参考: PR:L(要先有个普通账号) S:U C:H(他人隐私全泄露) I:N A:N。计算得 6.5 中危 — 这正是大量真实 SRC 平台给『水平越权泄露隐私』的标准评级。" },
+    ];
+    const wrap = document.createElement("div");
+    let cur = 0, pass = 0;
+    const render = () => {
+      const s = scen[cur];
+      const pick = { AV: "N", AC: "L", PR: "N", UI: "N", S: "U", C: "N", I: "N", A: "N" };
+      wrap.innerHTML = `
+        <div class="row mb" style="justify-content:space-between"><b style="color:var(--cyan)">${s.name} (${cur + 1}/${scen.length})</b>${pass > 0 ? `<span class="tag green">已通过 ${pass}/${scen.length}</span>` : ""}</div>
+        <div class="diag-explain" style="line-height:1.9">${s.desc}</div>
+        <div class="dim small mt mb">为它选择 CVSS 3.1 向量(每项都想: 攻击者实际处于什么位置/需要什么条件):</div>
+        ${Object.keys(OPTS).map((k) => `
+          <div class="task-item" style="flex-wrap:wrap">
+            <div class="t-tag" style="min-width:76px">${LBL[k]}</div>
+            ${OPTS[k].map(([v, t]) => `<span class="tag" data-k="${k}" data-v="${v}" style="cursor:pointer">${v} · ${t}</span>`).join("")}
+          </div>`).join("")}
+        <div class="row mt" style="justify-content:space-between;align-items:center">
+          <button class="btn btn-sm btn-primary" id="cv-submit">提交评分</button>
+          <div id="cv-score" class="mono"></div>
+        </div>
+        <div id="cv-result" class="mt"></div>`;
+      wrap.querySelectorAll("[data-k]").forEach((t) => {
+        t.onclick = () => {
+          const k = t.dataset.k;
+          pick[k] = t.dataset.v;
+          wrap.querySelectorAll(`[data-k="${k}"]`).forEach((x) => { x.style.borderColor = ""; x.style.color = ""; });
+          t.style.borderColor = "var(--cyan)"; t.style.color = "var(--cyan)";
+        };
+      });
+      wrap.querySelector("#cv-submit").onclick = () => {
+        const score = cvss(pick), refScore = cvss(s.ref);
+        wrap.querySelector("#cv-score").innerHTML = `你的评分: <b style="color:var(--${sevColor(score)})">${score.toFixed(1)} ${sev(score)}</b>`;
+        const ok = Math.abs(score - refScore) <= 0.5;
+        if (ok) pass++;
+        wrap.querySelector("#cv-result").innerHTML = `
+          <div class="diag-explain" style="border-color:${ok ? "var(--green-dim)" : "var(--amber)"}">
+            ${ok ? `✓ 通过(参考 ${refScore.toFixed(1)} ${sev(refScore)})` : `✗ 你的 ${score.toFixed(1)} 偏离参考值 ${refScore.toFixed(1)} ${sev(refScore)}`}
+            <div class="mt small">${s.why}</div>
+          </div>
+          ${cur < scen.length - 1 ? `<button class="btn btn-sm btn-primary mt" id="cv-next">下一场景 →</button>` : ""}`;
+        const nb = wrap.querySelector("#cv-next");
+        if (nb) nb.onclick = () => { cur++; render(); };
+        if (pass === scen.length) {
+          CF.prog.markEvidence("s4_cvss", "e2"); CF.prog.markEvidence("s4_cvss", "e4"); CF.prog.addXP(80);
+          setTimeout(() => $.toast("CVSS 评分训练完成 — 报告评级经得起推敲了"), 400);
+        }
+      };
+    };
+    container.appendChild(wrap);
+    render();
+  };
+
+  /* ==================== 侦察工具模拟: 子域名枚举 + 目录爆破 ==================== */
+  CF.renderReconTools = (container) => {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `
+      <div class="dim small mb">模拟两大侦察工具。任务: ① 找出高价值子域名 ② 从目录扫描结果里选出 3 个最危险的发现。全部完成获得『能迁移』。</div>
+      <div class="panel-title" style="font-size:.9rem">① 子域名枚举(模拟 subfinder)</div>
+      <div class="row mb"><span class="faint small mono">target: corp.example.com</span><button class="btn btn-sm" id="sub-run">运行枚举</button></div>
+      <div id="sub-out" class="term" style="font-size:.74rem;line-height:2;min-height:60px"></div>
+      <div id="sub-q" class="mt"></div>
+      <hr class="sep">
+      <div class="panel-title" style="font-size:.9rem">② 目录爆破(模拟 dirsearch)</div>
+      <div class="row mb"><span class="faint small mono">wordlist: common.txt (10 条)</span><button class="btn btn-sm" id="dir-run">开始爆破</button></div>
+      <div id="dir-out" class="term" style="font-size:.74rem;line-height:2;min-height:60px"></div>
+      <div id="dir-q" class="mt"></div>`;
+    container.appendChild(wrap);
+    // 子域名
+    const subs = [
+      ["www.corp.example.com", "200", "企业官网"],
+      ["api.corp.example.com", "200", "API 网关(文档公开)"],
+      ["admin.corp.example.com", "403", "管理后台(IP 限制)"],
+      ["vpn.corp.example.com", "200", "VPN 登录页"],
+      ["dev.corp.example.com", "200", "开发环境 — 调试面板 /debug 未鉴权!"],
+      ["staging.corp.example.com", "302", "预发布环境"],
+    ];
+    let subDone = false;
+    wrap.querySelector("#sub-run").onclick = () => {
+      const out = wrap.querySelector("#sub-out");
+      out.innerHTML = "";
+      let i = 0;
+      const t = setInterval(() => {
+        if (i >= subs.length) {
+          clearInterval(t);
+          out.innerHTML += `<div style="color:var(--cyan)">[*] 枚举完成: 发现 ${subs.length} 个子域名</div>`;
+          wrap.querySelector("#sub-q").innerHTML = `
+            <div class="diag-q" style="font-size:.88rem">哪个子域名最值得优先深入测试(攻击面最大)?</div>
+            ${subs.map((s, ii) => `<button class="diag-opt" data-sub="${ii}" style="font-size:.8rem">${s[0]}</button>`).join("")}
+            <div id="sub-fb"></div>`;
+          wrap.querySelectorAll("[data-sub]").forEach((b) => {
+            b.onclick = () => {
+              const ok = parseInt(b.dataset.sub) === 4;
+              wrap.querySelector("#sub-fb").innerHTML = `<div class="diag-explain" style="border-color:${ok ? "var(--green-dim)" : "var(--amber)"}">${ok ? "✓ 正确。dev 环境常带着调试面板/默认口令/详细报错 — 防护弱、数据真,是赏金猎人的金矿(但必须确认它在 Scope 内!)。" : "再看一眼: 找的是『防护最弱、信息最多』的那个。admin 有 IP 限制,官网没有攻击面。"}</div>`;
+              if (ok) subDone = true;
+            };
+          });
+          return;
+        }
+        const s = subs[i++];
+        out.innerHTML += `<div>[${s[1]}] ${s[0]} — ${s[2]}</div>`;
+      }, 220);
+    };
+    // 目录爆破
+    const dirs = [
+      ["/admin", "403", "禁止访问"],
+      ["/.git/config", "200", "Git 仓库配置泄露!"],
+      ["/backup", "200", "目录列表: db_2024.sql, site.zip"],
+      ["/uploads", "403", "禁止访问"],
+      ["/.env", "200", "环境变量: DB_PASSWORD=Pr0d_s3cret!"],
+      ["/test", "404", "不存在"],
+      ["/api-docs", "200", "API 文档(公开)"],
+      ["/robots.txt", "200", "常见文件"],
+      ["/.svn", "404", "不存在"],
+      ["/phpinfo.php", "404", "不存在"],
+    ];
+    let dirDone = false;
+    wrap.querySelector("#dir-run").onclick = () => {
+      const out = wrap.querySelector("#dir-out");
+      out.innerHTML = "";
+      let i = 0;
+      const t = setInterval(() => {
+        if (i >= dirs.length) {
+          clearInterval(t);
+          out.innerHTML += `<div style="color:var(--cyan)">[*] 扫描完成: 10 条路径,6 个非 404</div>`;
+          wrap.querySelector("#dir-q").innerHTML = `
+            <div class="diag-q" style="font-size:.88rem">选出 3 个必须立刻报告的高危发现:</div>
+            ${dirs.filter((d) => d[1] === "200").map((d) => `<span class="tag" data-dir="${d[0]}" style="cursor:pointer;margin:0 6px 6px 0">${d[0]}</span>`).join("")}
+            <div class="row mt"><button class="btn btn-sm btn-primary" id="dir-check">提交选择</button></div>
+            <div id="dir-fb"></div>`;
+          const sel = new Set();
+          wrap.querySelectorAll("[data-dir]").forEach((t2) => {
+            t2.onclick = () => {
+              const p = t2.dataset.dir;
+              if (sel.has(p)) { sel.delete(p); t2.style.borderColor = ""; t2.style.color = ""; }
+              else { sel.add(p); t2.style.borderColor = "var(--cyan)"; t2.style.color = "var(--cyan)"; }
+            };
+          });
+          wrap.querySelector("#dir-check").onclick = () => {
+            const want = new Set(["/.git/config", "/backup", "/.env"]);
+            const ok = sel.size === 3 && [...sel].every((x) => want.has(x));
+            wrap.querySelector("#dir-fb").innerHTML = `<div class="diag-explain" style="border-color:${ok ? "var(--green-dim)" : "var(--amber)"}">${ok ? "✓ 三个全是高危: .git/config 可还原源码、/backup 直接下载数据库、/.env 泄露生产密钥。robots.txt 和 api-docs 只是信息,谈不上高危。" : "高危的判据: 能拿到源码/数据/密钥,或能直接攻入。再想想哪三个满足。"}</div>`;
+            if (ok) dirDone = true;
+            if (dirDone && subDone) {
+              CF.prog.markEvidence("r0_recon", "e3"); CF.prog.addXP(70);
+              $.toast("侦察工具训练完成: 找到了金矿子域名和三个致命泄露");
+            }
+          };
+          return;
+        }
+        const d = dirs[i++];
+        out.innerHTML += `[${d[1]}] ${d[0]} — ${d[2]}\n`;
+      }, 180);
+    };
+  };
 })();
