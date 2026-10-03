@@ -373,4 +373,196 @@
     }
     renderPhase(phase);
   };
+
+  /* ==================== S0: Scope Reader 交互实验室 ==================== */
+  CF.renderScopeReader = (container) => {
+    const doc = `【云购商城 SRC 测试规则 v3.2】
+一、测试范围(Scope)
+  *.yunshop.cn(含 www/api/mall 等所有子域名)
+  App API: https://app-api.yunshop.cn
+二、明确排除(Out of Scope)
+  *.internal.yunshop.cn(内部系统,禁止触碰)
+  vpn.yunshop.cn、mail.yunshop.cn(第三方托管)
+  任何物理设施、员工个人账号、社会工程
+三、测试方法限制
+  禁止: 高并发扫描/压测、拒绝服务、自动化爆破、
+        下载大量用户数据、植入持久化后门
+  允许: 手工验证、低频探测、概念性证明(PoC)
+四、报告要求
+  必须包含复现步骤 + 影响说明;重复漏洞不重复奖励`;
+    const cases = [
+      { q: "你在 mall.yunshop.cn 发现存储型 XSS,是否在测试范围内?", opts: ["在 — mall 是 *.yunshop.cn 的子域", "不在", "需先问客服", "只在周末在"], a: 0,
+        why: "*.yunshop.cn 覆盖全部一级及以下子域,mall.yunshop.cn 明确在 Scope 内,可以测试并提交。" },
+      { q: "你在 dev.internal.yunshop.cn 发现未授权访问,正确做法?", opts: ["立即停止,不测试不提交(internal 明确排除)", "赶紧提交拿首报", "测完只报高危", "发到群里讨论"], a: 0,
+        why: "Scope 明确排除 *.internal.yunshop.cn — 越界测试可能导致法律责任。正确做法: 停止,若已误测,如实说明。" },
+      { q: "发现 SQL 注入可导出全库,如何做符合规则的概念性证明?", opts: ["只取 1-2 条记录证明数据可读,不批量下载", "全库拖下来当证据", "删库证明危害", "改成管理员密码"], a: 0,
+        why: "『下载大量用户数据』被明确禁止。最小化证明 = 取最少数据证明影响成立,这是合规与技术的双重要求。" },
+      { q: "想用 sqlmap 跑注入点,规则允许吗?", opts: ["不允许 — 自动化爆破/扫描被禁止,只能手工验证", "允许,开着就行", "允许但限速", "看心情"], a: 0,
+        why: "规则禁止自动化爆破与高并发。sqlmap 默认多线程且行为激进,超出『手工验证+低频探测』边界。" },
+      { q: "vpn.yunshop.cn 登录页有弱口令,能报吗?", opts: ["不能 — vpn 在排除清单(第三方托管)", "能,弱口令谁都能报", "能,但奖金减半", "先测了再说"], a: 0,
+        why: "排除清单里的资产无论有什么漏洞都不收 — 这是对接第三方与法律边界的基本尊重。" },
+    ];
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `
+      <div class="dim small mb">先读这份模拟 SRC 规则,再回答 5 道范围判断题(至少 4 题对)。</div>
+      <div class="term mb" style="font-size:.76rem;line-height:1.9;white-space:pre-wrap">${$.esc(doc)}</div>
+      <div id="scope-q"></div>`;
+    container.appendChild(wrap);
+    const holder = wrap.querySelector("#scope-q");
+    let cur = 0, score = 0;
+    const render = () => {
+      if (cur >= cases.length) {
+        holder.innerHTML = `<div class="diag-explain" style="border-color:${score >= 4 ? "var(--green-dim)" : "var(--amber)"}">${score}/${cases.length}。${score >= 4 ? "你已经能独立读懂 Scope — 这一步做错,后面全白干。" : "重新读一遍规则里『排除』和『禁止』两节,再答一次。"}</div>`;
+        if (score >= 4) { CF.prog.markEvidence("s0_scope", "e1"); CF.prog.markEvidence("s0_scope", "e2"); CF.prog.markEvidence("s0_scope", "e4"); CF.prog.addXP(70); }
+        return;
+      }
+      const c = cases[cur];
+      holder.innerHTML = `
+        <div class="row mb" style="justify-content:space-between"><b style="color:var(--cyan)">判断 ${cur + 1}/${cases.length}</b></div>
+        <div class="diag-q" style="font-size:.9rem">${c.q}</div>
+        ${c.opts.map((o, i) => `<button class="diag-opt" data-si="${i}">${o}</button>`).join("")}
+        <div id="scope-why"></div>`;
+      holder.querySelectorAll("[data-si]").forEach((b) => {
+        b.onclick = () => {
+          const i = parseInt(b.dataset.si);
+          if (i === c.a) score++;
+          holder.querySelectorAll("[data-si]").forEach((x) => { x.disabled = true; if (parseInt(x.dataset.si) === c.a) x.classList.add("correct"); });
+          holder.querySelector("#scope-why").innerHTML = `<div class="diag-explain mt">${c.why}</div><button class="btn btn-sm btn-primary mt" id="scope-next">下一题 →</button>`;
+          holder.querySelector("#scope-next").onclick = () => { cur++; render(); };
+        };
+      });
+    };
+    render();
+  };
+
+  /* ==================== R1: 假设构建实验室 ==================== */
+  CF.renderHypothesisLab = (container) => {
+    const wrap = document.createElement("div");
+    const tasks = [
+      {
+        endpoint: "GET /api/orders?order_id=1001 (登录用户 Alice)",
+        good: ["把 order_id 改成 1002 看是否返回他人订单(IDOR)", "把 order_id 改成负数/字符串看报错是否泄露信息", "去掉 order_id 参数看默认行为"],
+        bad: ["这个系统可能有问题", "把整个订单表都下载下来看看", "对服务器发起高并发请求测试"],
+        whyGood: "每条都是『具体动作 + 可观察结果』,一次请求就能证伪。",
+        whyBad: "要么不可验证(可能有问题),要么违反最小化原则(拖库/压测)。",
+      },
+      {
+        endpoint: "POST /api/profile/update (JSON: {\"nickname\":\"...\"})",
+        good: ["在 nickname 里放 <script> 看是否被过滤(存储 XSS)", "多加一个 \"role\":\"admin\" 字段看服务端是否接受( mass assignment )", "把请求重放两次看是否幂等"],
+        bad: ["系统应该有过滤吧", "试试把数据库删了", "扫全站端口"],
+        whyGood: "分别验证输出编码、字段白名单、幂等性 — 三个可证伪的安全假设。",
+        whyBad: "『应该有吧』不是假设;破坏性动作与无目标扫描都不是研究方法。",
+      },
+    ];
+    let cur = 0, solved = 0;
+    const render = () => {
+      if (cur >= tasks.length) {
+        wrap.innerHTML = `<div class="diag-explain" style="border-color:${solved === tasks.length ? "var(--green-dim)" : "var(--amber)"}">${solved}/${tasks.length} 关通过。${solved === tasks.length ? "你已能从任意端点直接产出可验证假设清单 — 这是研究效率的来源。" : "记住公式: 具体动作 + 可观察结果 = 好假设。"}</div>`;
+        if (solved === tasks.length) { CF.prog.markEvidence("r1_model", "e1"); CF.prog.markEvidence("r1_model", "e2"); CF.prog.markEvidence("r1_model", "e4"); CF.prog.addXP(80); }
+        return;
+      }
+      const t = tasks[cur];
+      const all = [...t.good.map((g, i) => ({ txt: g, ok: true, k: "g" + i })), ...t.bad.map((b, i) => ({ txt: b, ok: false, k: "b" + i }))]
+        .sort(() => Math.random() - 0.5);
+      wrap.innerHTML = `
+        <div class="row mb" style="justify-content:space-between"><b style="color:var(--cyan)">端点 ${cur + 1}/${tasks.length}</b>${solved ? `<span class="tag green">已通过 ${solved}</span>` : ""}</div>
+        <div class="term mb" style="font-size:.8rem">${$.esc(t.endpoint)}</div>
+        <div class="dim small mb">选出全部 3 条『好假设』(具体、可验证、不越界),不要选坏假设:</div>
+        <div id="hyp-list">${all.map((o) => `<div class="task-item" data-k="${o.k}" style="cursor:pointer"><div class="t-name" style="font-size:.82rem">${$.esc(o.txt)}</div></div>`).join("")}</div>
+        <button class="btn btn-sm btn-primary mt" id="hyp-check">提交选择</button>
+        <div id="hyp-fb" class="mt"></div>`;
+      const sel = new Set();
+      wrap.querySelectorAll("[data-k]").forEach((el) => {
+        el.onclick = () => {
+          const k = el.dataset.k;
+          if (sel.has(k)) { sel.delete(k); el.style.borderColor = ""; }
+          else { sel.add(k); el.style.borderColor = "var(--cyan)"; }
+        };
+      });
+      wrap.querySelector("#hyp-check").onclick = () => {
+        const want = new Set(t.good.map((_, i) => "g" + i));
+        const ok = sel.size === want.size && [...sel].every((x) => want.has(x));
+        wrap.querySelector("#hyp-fb").innerHTML = `<div class="diag-explain" style="border-color:${ok ? "var(--green-dim)" : "var(--amber)"}">
+          ${ok ? `✓ 全对。${t.whyGood}` : `✗ ${t.whyBad} 再想想: 哪些是一次请求就能验证的?`}
+        </div>
+        ${ok ? `<button class="btn btn-sm btn-primary mt" id="hyp-next">下一端点 →</button>` : `<button class="btn btn-sm mt" id="hyp-retry">重新选择</button>`}`;
+        if (ok) {
+          solved++;
+          wrap.querySelector("#hyp-next").onclick = () => { cur++; render(); };
+        } else {
+          wrap.querySelector("#hyp-retry").onclick = () => render();
+        }
+      };
+    };
+    container.appendChild(wrap);
+    render();
+  };
+
+  /* ==================== R2: 最小化验证实验室 ==================== */
+  CF.renderVerifyLab = (container) => {
+    const cases = [
+      {
+        title: "场景 1 · 疑似水平越权",
+        finding: "GET /api/orders?order_id=1001 返回了你的订单。你怀疑改 order_id 能看别人的。",
+        opts: [
+          { txt: "只把 order_id 改成相邻的一个值(如 1002),确认返回他人姓名/手机号即停", ok: true },
+          { txt: "写脚本遍历全部 order_id,把所有用户订单保存为证据", ok: false },
+          { txt: "顺手把他人订单状态改成已发货,证明可篡改", ok: false },
+          { txt: "什么都不做,直接报告『可能存在越权』", ok: false },
+        ],
+        why: "最小化证明 = 用一条他人记录证明越权成立。批量拖取与篡改数据都超出『证明』需要,属于违规。",
+      },
+      {
+        title: "场景 2 · 疑似 SQL 注入",
+        finding: "GET /api/search?q=phone' 返回 500 + MySQL 报错,你怀疑存在注入。",
+        opts: [
+          { txt: "用 q=phone' OR '1'='1 确认能返回异常数据集(如隐藏商品),截图后停止", ok: true },
+          { txt: "用 sqlmap --dump 全自动脱库,证据更充分", ok: false },
+          { txt: "尝试 UNION 提取管理员密码并登录后台", ok: false },
+          { txt: "只报 500 报错,不进一步验证", ok: false },
+        ],
+        why: "OR 1=1 返回隐藏数据已完整证明注入+影响,且不触碰真实用户数据。脱库与登录后台都属越界。",
+      },
+      {
+        title: "场景 3 · 疑似存储型 XSS",
+        finding: "留言板把昵称原样输出。你怀疑能存 XSS。",
+        opts: [
+          { txt: "提交 <img src=x onerror=alert(document.domain)>,在自己的浏览器看到弹窗即停", ok: true },
+          { txt: "写盗取 Cookie 的 payload,等其他用户触发后收集会话", ok: false },
+          { txt: "注入挖矿脚本证明危害", ok: false },
+          { txt: "提交 <b>test</b> 看到粗体就报告存储型 XSS", ok: false },
+        ],
+        why: "alert(document.domain) 是标准概念性证明。真实盗取他人会话、影响其他用户,是攻击不是研究。只证明 HTML 注入(<b>)则证据不足。",
+      },
+    ];
+    const wrap = document.createElement("div");
+    let cur = 0, score = 0;
+    const render = () => {
+      if (cur >= cases.length) {
+        wrap.innerHTML = `<div class="diag-explain" style="border-color:${score >= 3 ? "var(--green-dim)" : "var(--amber)"}">${score}/${cases.length}。${score >= 3 ? "你已经内化了『证明影响,但不造成伤害』— 这是白帽与攻击者的分界线。" : "核心口诀: 概念性证明(PoC),最小数据,及时停止。"}</div>`;
+        if (score >= 3) { CF.prog.markEvidence("r2_verify", "e1"); CF.prog.markEvidence("r2_verify", "e2"); CF.prog.markEvidence("r2_verify", "e4"); CF.prog.addXP(80); }
+        return;
+      }
+      const c = cases[cur];
+      wrap.innerHTML = `
+        <div class="row mb" style="justify-content:space-between"><b style="color:var(--cyan)">${c.title}</b><span class="tag purple">${cur + 1}/${cases.length}</span></div>
+        <div class="term mb" style="font-size:.8rem">${$.esc(c.finding)}</div>
+        <div class="dim small mb">选择唯一符合『最小化验证』原则的做法:</div>
+        ${c.opts.map((o, i) => `<button class="diag-opt" data-vi="${i}" style="text-align:left;font-size:.84rem">${$.esc(o.txt)}</button>`).join("")}
+        <div id="ver-why"></div>`;
+      wrap.querySelectorAll("[data-vi]").forEach((b) => {
+        b.onclick = () => {
+          const i = parseInt(b.dataset.vi);
+          const ok = c.opts[i].ok;
+          if (ok) score++;
+          wrap.querySelectorAll("[data-vi]").forEach((x) => { x.disabled = true; if (c.opts[parseInt(x.dataset.vi)].ok) x.classList.add("correct"); else if (x === b) x.classList.add("wrong"); });
+          wrap.querySelector("#ver-why").innerHTML = `<div class="diag-explain mt" style="border-color:${ok ? "var(--green-dim)" : "var(--amber)"}">${c.why}</div>
+            <button class="btn btn-sm btn-primary mt" id="ver-next">${cur < cases.length - 1 ? "下一场景 →" : "查看结果"}</button>`;
+          wrap.querySelector("#ver-next").onclick = () => { cur++; render(); };
+        };
+      });
+    };
+    container.appendChild(wrap);
+    render();
+  };
 })();

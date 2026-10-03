@@ -235,18 +235,13 @@
     const prog = CF.prog.node(id);
 
     if (!content) {
-      // 没有内容 = 简单完成节点(后续步骤补充详细内容)
+      // 没有内容 = 配置错误(所有节点都应有课程),不可跳过
       $.mount(`
         <div class="panel">
           <div class="panel-title">${n.name}</div>
           <p class="dim">${n.desc}</p>
-          <div class="stepflow">${n.reqs.length ? "" : ""}
-            ${["s1","s2","s3","s4","s5","s6","s7"].map((k,i) => `<span class="sf ${prog.steps[k] ? "ok" : ""}">${["极短理论","可视化","跟做","半独立","解释","变体","迁移"][i]}</span>`).join("")}
-          </div>
-          <div class="term">// 本节点的详细训练内容将在后续步骤中加载
-// 当前为占位模式,点击"标记完成"可暂时通过
-// 后续会替换为真实的交互式训练</div>
-          <button class="btn btn-primary mt" onclick="CF.quickDone('${id}')">标记完成 (临时)</button>
+          <div class="term">// 该节点课程内容缺失(配置错误)
+// 请通过『指南』页反馈,本节点不可跳过</div>
         </div>
       `);
       return;
@@ -339,7 +334,7 @@
         "f8_subnet": [1,2,3], "f9_capture": [1,2,3], "f10_perm": [1,2,3],
         "f0b_vm": [1,2,3], "f1b_protocols": [1,2,3], "f3b_ps": [1,2,3], "f11_cve": [1,2,3],
         "s3_board": [1,2,3], "s4_cvss": [1,2,3],
-        "w_boss": [1,2,3,4,5,6], "r0_recon": [1,2,3], "r3_fp": [1,2,3],
+        "w_boss": [1,2,3,4,5,6], "r0_recon": [1,2,3], "r1_model": [1,2,3], "r2_verify": [1,2,3], "r3_fp": [1,2,3],
         "s0_scope": [1,2,3], "s1_report": [1,2,3], "s2_review": [1,2,3],
         "s_boss": [1,2,3,4,5,6],
       };
@@ -372,7 +367,10 @@
         else if (CF.vulnLabs && CF.vulnLabs[id]) CF.renderVulnLab(zone, CF.vulnLabs[id]);
         else if (id === "w_boss") { CF.renderWebBoss(zone); CF.attachBossTimer(zone); }
         else if (id === "r0_recon") CF.renderTabs(zone, [["攻击面建模", CF.renderReconLab], ["侦察工具", CF.renderReconTools]]);
+        else if (id === "r1_model") CF.renderHypothesisLab(zone);
+        else if (id === "r2_verify") CF.renderVerifyLab(zone);
         else if (id === "r3_fp") CF.renderFpTrainer(zone);
+        else if (id === "s0_scope") CF.renderScopeReader(zone);
         else if (id === "s1_report" || id === "s2_review") CF.renderReportWriter(zone);
         else if (id === "s_boss") CF.renderFinalBoss(zone);
       }
@@ -393,7 +391,7 @@
       "w3_ac","w4_sqli","w5_xss","w6_csrf","w7_upload","w8_ssrf","w9_cmdi","w10_api","w11_logic",
       "w12_traversal","w13_xxe","w14_ssti","w15_nosqli","w16_deser","w17_oauth","w18_race",
       "w19_proto","w20_graphql","w21_misconfig","w22_sensitive","w23_session","w24_llm","w25_sms",
-      "r0_recon","r3_fp","s3_board","f11_cve","s4_cvss",
+      "r0_recon","r1_model","r2_verify","r3_fp","s0_scope","s3_board","f11_cve","s4_cvss",
     ]);
     if (key === "s3" && needLabBeforeS3.has(id) && !BOSS[id]) {
       const p = CF.prog.node(id);
@@ -410,13 +408,6 @@
     viewStepMap[id] = nextIdx === -1 ? keys.length - 1 : nextIdx;
     $.toast("本步骤完成");
     renderNode(id);
-  };
-  CF.quickDone = (id) => {
-    // 占位节点兜底: 直接授予前四维并完成
-    ["e1", "e2", "e3", "e4"].forEach((k) => CF.prog.markEvidence(id, k));
-    CF.prog.addXP(50);
-    $.toast("节点已完成");
-    CF.go("home");
   };
   CF.finishNode = (id) => {
     const content = CF.nodeContent(id);

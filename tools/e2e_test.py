@@ -8,6 +8,8 @@ if not os.path.exists(EDGE):
     EDGE = r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"
 
 prof = os.path.join(os.environ["TEMP"], "cf_test_profile")
+import shutil
+shutil.rmtree(prof, ignore_errors=True)  # 清缓存,避免旧 JS 被缓存
 proc = subprocess.Popen([EDGE, "--headless=new", "--disable-gpu", "--no-first-run",
                          f"--remote-debugging-port={PORT}", f"--user-data-dir={prof}", URL],
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -351,6 +353,68 @@ c.eval("[...document.querySelectorAll('button')].find(b=>b.textContent.includes(
 time.sleep(0.3)
 recon_tools = c.eval("document.body.textContent.includes('目录爆破') && document.body.textContent.includes('子域名枚举')")
 check("L8 侦察工具(子域名+目录爆破)渲染", recon_tab_btn is True and recon_tools is True)
+
+# ---------- 测试 M: 三个新实验室(Scope/假设/最小化验证) ----------
+m1 = c.eval("JSON.stringify([typeof CF.renderScopeReader, typeof CF.renderHypothesisLab, typeof CF.renderVerifyLab])")
+check("M1 三个渲染器就绪", m1 == '["function","function","function"]', m1)
+
+# s0_scope: 解锁链 r2_verify 前置,直接标记链上节点 done 后进入
+c.eval("['w_boss','r0_recon','r1_model','r2_verify'].forEach(id=>CF.prog.node(id).done=true); CF.go('node?s0_scope'); CF.viewStep('s0_scope',2); 'ok'")
+time.sleep(0.8)
+scope_doc = c.eval("document.body.textContent.includes('云购商城 SRC 测试规则')")
+check("M2 Scope 文档渲染", scope_doc is True)
+for _ in range(5):
+    c.eval("(document.querySelector('#scope-q .diag-opt')||{}).click ? document.querySelector('#scope-q .diag-opt').click() : 0; 'ok'")
+    time.sleep(0.05)
+    c.eval("document.querySelector('#scope-next') ? document.querySelector('#scope-next').click() : 0; 'ok'")
+    time.sleep(0.05)
+time.sleep(0.3)
+scope_ev = c.eval("CF.prog.node('s0_scope').evidence.e2 === true && CF.prog.node('s0_scope').evidence.e4 === true")
+check("M3 Scope 五题通过授予 e2+e4", scope_ev is True)
+
+# r1_model: 假设实验室(data-k 稳定: g0/g1/g2 = 好假设,不受乱序影响)
+c.eval("CF.go('node?r1_model'); CF.viewStep('r1_model',2); 'ok'")
+time.sleep(0.8)
+for rnd in range(2):
+    for k in ["g0", "g1", "g2"]:
+        c.eval(f"document.querySelector('[data-k=\"{k}\"]').click(); 'ok'")
+        time.sleep(0.03)
+    c.eval("document.querySelector('#hyp-check').click(); 'ok'")
+    time.sleep(0.2)
+    c.eval("(document.querySelector('#hyp-next')||{}).click ? document.querySelector('#hyp-next').click() : 0; 'ok'")
+    time.sleep(0.2)
+time.sleep(0.3)
+hyp_ev = c.eval("CF.prog.node('r1_model').evidence.e2 === true && CF.prog.node('r1_model').evidence.e4 === true")
+check("M4 假设实验室两关通过授予 e2+e4", hyp_ev is True)
+
+# r2_verify: 最小化验证(正确答案固定在第一个选项)
+c.eval("CF.go('node?r2_verify'); CF.viewStep('r2_verify',2); 'ok'")
+time.sleep(0.8)
+for _ in range(3):
+    c.eval("(document.querySelector('[data-vi=\"0\"]')||{}).click ? document.querySelector('[data-vi=\"0\"]').click() : 0; 'ok'")
+    time.sleep(0.05)
+    c.eval("document.querySelector('#ver-next') ? document.querySelector('#ver-next').click() : 0; 'ok'")
+    time.sleep(0.05)
+time.sleep(0.3)
+ver_ev = c.eval("CF.prog.node('r2_verify').evidence.e2 === true && CF.prog.node('r2_verify').evidence.e4 === true")
+check("M5 最小化验证三场景通过授予 e2+e4", ver_ev is True)
+
+# M6: r1_model 现在也有 s3 硬门槛(先重置 evidence 再验证拦截)
+m6 = c.eval("""(()=>{ const p=CF.prog.node('r1_model'); const saved=JSON.parse(JSON.stringify(p.evidence));
+  p.evidence={}; CF.store.save();
+  const blocked = (function(){ const before=p.steps.s3; CF.completeStep('r1_model','s3'); return !(CF.prog.node('r1_model').steps.s3||false); })();
+  p.evidence=saved; CF.store.save(); return blocked; })()""")
+check("M6 r1_model s3 未做实验被拦截", m6 is True)
+
+# 全节点交互覆盖审计(除 BOSS 外全部有渲染路径)
+m7 = c.eval("""(()=>{
+  const dispatch = new Set(['f0_cpu','f0b_vm','f1_net','f1b_protocols','f2_linux','f3_win','f3b_ps','f11_cve',
+    'f4_py','f5_git','f6_eng','f7_nmap','f8_subnet','f9_capture','f10_perm','f_boss','w0_http','w1_burp',
+    'w2_auth','w_boss','r0_recon','r1_model','r2_verify','r3_fp','s0_scope','s1_report','s2_review','s_boss','s3_board','s4_cvss']);
+  const noLab = CF.nodes.filter(n=>!n.boss && !dispatch.has(n.id) && !(CF.vulnLabs||{})[n.id]).map(n=>n.id);
+  return JSON.stringify(noLab);
+})()""")
+check("M7 全部非BOSS节点均有交互实验室", m7 == "[]", m7)
 
 c.close()
 proc.terminate()
